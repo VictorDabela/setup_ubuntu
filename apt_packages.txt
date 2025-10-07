@@ -1,0 +1,40 @@
+# ==============================================================================
+# Pacotes APT para instalar no novo sistema
+# ==============================================================================
+
+APT_PACKAGES=(
+    # --- Essenciais de Sistema e Build ---
+    build-essential
+    curl
+    wget
+    git
+    gnupg
+    software-properties-common
+    ubuntu-restricted-extras # Instala codecs e fontes da Microsoft
+
+    # --- Shell e Terminal ---
+    zsh
+    vim
+    jq
+    
+    # --- Ferramentas de Desenvolvimento ---
+    python3-pip
+    python3-venv
+    python3-all-dev
+    powershell
+    postgresql-client # Apenas o cliente para conectar a bancos remotos
+    redis-tools       # Apenas as ferramentas de CLI para conectar ao Redis
+    # NOTA: Docker, .NET, Azure CLI, etc., são instalados via repositórios customizados
+
+    # --- Aplicações Gráficas (GUI) ---
+    flameshot
+    gnome-boxes
+    gnome-tweaks
+    qbittorrent
+    slimbookbattery
+    synaptic
+    ubuntu-cleaner
+    
+    # --- Navegadores e Comunicação ---
+    # NOTA: Chrome, Brave, Discord, etc., são instalados via repositórios customizados ou .deb
+)
