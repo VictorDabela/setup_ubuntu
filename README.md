@@ -51,7 +51,7 @@ Antes de executar os scripts, você precisa coletar 3 arquivos de configuração
     * **Como criar:** `tar -czvf insomnia_config.tar.gz -C ~/.config Insomnia`
 
 A estrutura da pasta, antes de rodar o setup, deve ser:
-` ` `
+```
 .
 ├── .hyper.js
 ├── .zshrc
@@ -59,16 +59,16 @@ A estrutura da pasta, antes de rodar o setup, deve ser:
 └── scripts/
     ├── setup_ubuntu.sh
     └── setup_ubuntu_cli.sh
-` ` `
+```
 
 ## ⚡ Como Usar
 
 ### 1. Clonar o Repositório
 Na sua máquina nova e limpa, clone este repositório:
-` ` `bash
+```bash
 git clone <URL_DO_SEU_REPOSITORIO> ~/dotfiles
 cd ~/dotfiles
-` ` `
+```
 
 ### 2. Preparar os Arquivos
 Mova os arquivos de pré-requisito (`.zshrc`, etc.) para a raiz da pasta `~/dotfiles`, como descrito acima.
@@ -79,22 +79,22 @@ Existem duas versões do script na pasta `scripts/`. Dê permissão de execuçã
 #### Opção A: Setup Completo (GUI)
 Este é o script principal, para ser usado na sua máquina de trabalho. Ele instala **tudo**: ferramentas de linha de comando e todos os aplicativos gráficos.
 
-` ` `bash
+```bash
 ./scripts/setup_ubuntu.sh
-` ` `
+```
 
 #### Opção B: Setup Apenas CLI (Para Servidores ou Teste)
 Esta versão instala **apenas** as ferramentas de linha de comando. É perfeita para testar em um container Docker ou para configurar um servidor de desenvolvimento remoto.
 
-` ` `bash
+```bash
 ./scripts/setup_ubuntu_cli.sh
-` ` `
+```
 
 ## 🐳 Teste com Docker
 É altamente recomendado testar o script `setup_ubuntu_cli.sh` em um ambiente Docker para validar as instalações de CLI.
 
 1.  **Crie um `Dockerfile`** na raiz do projeto:
-    ` ` `dockerfile
+    ```dockerfile
     # Usa a imagem base do Ubuntu 24.04
     FROM ubuntu:24.04
 
@@ -120,10 +120,10 @@ Esta versão instala **apenas** as ferramentas de linha de comando. É perfeita 
 
     # Roda o script e mantém o container ativo para inspeção
     CMD ["/bin/bash", "-c", "./scripts/setup_ubuntu_cli.sh; sleep infinity"]
-    ` ` `
+    ```
 
 2.  **Construa e execute:**
-    ` ` `bash
+    ```bash
     # Construir a imagem (vai demorar)
     docker build --no-cache -t teste-ambiente .
 
@@ -132,7 +132,7 @@ Esta versão instala **apenas** as ferramentas de linha de comando. É perfeita 
 
     # Acompanhar os logs
     docker logs -f teste-container
-    ` ` `
+    ```
 
 ## ✅ Checklist Pós-Instalação
 
@@ -143,7 +143,7 @@ Após a execução do script na sua máquina nova, siga estes passos manuais:
 2.  **Configure o Terminal:** Abra o Hyper, vá nas configurações (`Ctrl + ,`) e mude a fonte para `FiraCode Nerd Font Mono` para ter todos os ícones visuais.
 
 3.  **Configure o Zsh:** Abra seu `~/.zshrc` e garanta que as seguintes linhas estão presentes para ativar os plugins e ferramentas:
-    ` ` `zsh
+    ```zsh
     # No final do arquivo, para pyenv:
     export PYENV_ROOT="$HOME/.pyenv"
     [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
@@ -154,7 +154,7 @@ Após a execução do script na sua máquina nova, siga estes passos manuais:
 
     # No final do arquivo, para o zoxide:
     eval "$(zoxide init zsh)"
-    ` ` `
+    ```
 
 4.  **Instale Extensões do GNOME:** Visite [extensions.gnome.org](https://extensions.gnome.org/) e instale a extensão **Forge** para recriar a experiência de tiling de janelas do Pop!\_OS.
 
