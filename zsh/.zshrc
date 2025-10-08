@@ -1,3 +1,7 @@
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
@@ -127,6 +131,7 @@ alias zonfig='vim ~/.zshrc' # abre arquivo de config do oh my zsh no Vim
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # PIP Settings.
+export PIP_INDEX_URL=https://nodis:0Vi9m1KYo7Py@pypi.nodis.com.br/simple
 export PIP_EXTRA_INDEX_URL=https://pypi.python.org/simple/
 
 export NVM_DIR="$HOME/.nvm"
@@ -134,3 +139,7 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 export DOTNET_ROOT=/snap/dotnet-sdk/current
 
+# vault config
+export VAULT_ADDR=https://vault.nodis.com.br
+#export VAULT_ADDR=http://127.0.0.1:8200
+export NODIS_VAULT_KEYNAME="credencial"

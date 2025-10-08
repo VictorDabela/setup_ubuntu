@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
-# Script de Setup de Ambiente de Desenvolvimento - Ubuntu 24.04 (Noble Numbat)
-# v25 - Adicionado NeoVim
+# Script de Setup de Ambiente CLI - Ubuntu 24.04 (Noble Numbat)
+# Versão Final - Edição Dotfiles com Stow
 # ==============================================================================
 set -e
 
@@ -9,27 +9,26 @@ set -e
 export TZ=America/Sao_Paulo
 UBUNTU_RELEASE_NAME=$(lsb_release -cs)
 APT_PACKAGES=(
-    build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates
+    # Essenciais e Build
+    stow build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates
+    # Dependências de build para pyenv
     libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+    # Shell, Terminal e Utilitários
     zsh vim neovim jq tree unzip
+    # Ferramentas de Desenvolvimento
     python3-pip python3-venv python3-all-dev postgresql-client redis-tools pipx
-    flameshot gnome-boxes gnome-tweaks qbittorrent
+    # Ferramentas CLI Modernas e Monitores
     bat eza fd-find ripgrep zoxide btop
 )
-PIPX_PACKAGES=(pipenv uv docker-compose pre-commit)
+PIPX_PACKAGES=(pipenv uv pre-commit)
 PYTHON_VERSIONS_TO_INSTALL=(3.12.3 3.10.13)
 PYTHON_GLOBAL_VERSION=3.12.3
-FLATPAKS=(com.slack.Slack com.getpostman.Postman md.obsidian.Obsidian)
-VSCODE_EXTENSIONS=()
 
 # --- Funções de Instalação ---
 install_base_packages() {
     echo "📦 Instalando pacotes base do APT..."
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-    # Pré-aceita a licença das fontes da Microsoft para modo não-interativo
-    echo "ttf-mscorefonts-installer ttf-mscorefonts-installer/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-
+    sudo apt-get clean
     sudo apt-get update
     sudo apt-get install -y "${APT_PACKAGES[@]}"
 }
@@ -38,7 +37,7 @@ install_nvm_and_nodejs() {
     echo "📦 Instalando NVM (Node Version Manager), Node.js (LTS) e Yarn..."
 
     # Instala o NVM
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    curl -o- -L https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 
     # Carrega o NVM no ambiente atual do script para poder usá-lo imediatamente
     export NVM_DIR="$HOME/.nvm"
@@ -79,51 +78,72 @@ install_pyenv_and_python_versions() {
     pyenv global "$PYTHON_GLOBAL_VERSION"
 }
 
+install_aws_tools() {
+    echo "📦 Instalando ferramentas da AWS (AWS CLI, SAM CLI)..."
+    TEMP_AWS_DIR=$(mktemp -d)
+    cd "$TEMP_AWS_DIR"
+    echo "    - Baixando e instalando AWS CLI..."
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip -q awscliv2.zip
+    sudo ./aws/install
+    echo "    - Baixando e instalando AWS SAM CLI..."
+    wget -q "https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip" -O "sam.zip"
+    unzip -q sam.zip -d sam-installation
+    sudo ./sam-installation/install
+    cd - > /dev/null
+    rm -rf "$TEMP_AWS_DIR"
+}
+
 add_custom_repos_and_install() {
-    echo "📦 Adicionando repositórios de terceiros..."
+    echo "📦 Adicionando repositórios de CLI de terceiros..."
     sudo install -m 0755 -d /etc/apt/keyrings
 
-    # ... (outros repositórios permanecem iguais)
-    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+    # Microsoft
     wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/packages.microsoft.gpg > /dev/null
     echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
-    sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main"|sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+
+    # GitHub CLI
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
     sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
-    curl -fsSL https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --dearmor -o /usr/share/keyrings/pgadmin4-archieve-keyring.gpg
-    sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/pgadmin4-archieve-keyring.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" > /etc/apt/sources.list.d/pgadmin4.list'
+
+    # Docker
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+
+    # HashiCorp (Terraform)
     wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+
+    # Kubernetes (kubectl)
     curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
-    curl -1sLf 'https://packages.konghq.com/public/insomnia/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/insomnia.gpg
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/insomnia.gpg] https://packages.konghq.com/public/insomnia/deb/ ubuntu-$(lsb_release -cs) non-free" | sudo tee /etc/apt/sources.list.d/insomnia.list
 
     echo "🔄 Atualizando listas de pacotes..."
     sudo apt-get update
 
     echo "📦 Instalando pacotes de repositórios customizados..."
     CUSTOM_APT_PACKAGES=(
-        insomnia google-chrome-stable code powershell azure-cli brave-browser gh spotify-client teams-for-linux dotnet-sdk-8.0 pgadmin4-desktop
+        code powershell azure-cli gh
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-        terraform kubectl
+        terraform kubectl dotnet-sdk-8.0
     )
     sudo apt-get install -y "${CUSTOM_APT_PACKAGES[@]}"
 }
 
 install_extra_binaries() {
     echo "📦 Instalando binários extras (k9s)..."
-    TEMP_BIN_DIR=$(mktemp -d); cd "$TEMP_BIN_DIR"
-    echo "    - Baixando e instalando k9s..."; wget -qO k9s.tar.gz "https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_amd64.tar.gz"; tar -xzf k9s.tar.gz; sudo install k9s /usr/local/bin
-    cd - > /dev/null && rm -rf "$TEMP_BIN_DIR"
+    TEMP_BIN_DIR=$(mktemp -d)
+    cd "$TEMP_BIN_DIR"
+    echo "    - Baixando e instalando k9s..."
+    wget -qO k9s.tar.gz "https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_amd64.tar.gz"
+    tar -xzf k9s.tar.gz
+    sudo install k9s /usr/local/bin
+    cd - > /dev/null
+    rm -rf "$TEMP_BIN_DIR"
 }
 
 install_pipx_packages() {
@@ -135,12 +155,26 @@ install_pipx_packages() {
 }
 
 # --- Configuração ---
+stow_dotfiles() {
+    echo "🔗 Gerenciando dotfiles com Stow..."
+
+    # Descobre o caminho absoluto para a raiz do repositório (a pasta acima de 'scripts')
+    local SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+    local REPO_ROOT=$( dirname "$SCRIPT_DIR" )
+
+    echo "    - Linkando zsh..."
+    # A flag -d diz ao stow onde está a pasta com os 'pacotes' (zsh, etc.)
+    # A flag -t diz para onde os links devem ser criados (nossa home)
+    stow --dir=$REPO_ROOT --target=$HOME -R zsh
+}
+
+
 configure_system() {
     echo "⚙️  Configurando o sistema..."
     sudo groupadd -f docker
-    sudo usermod -aG docker "$USER"
+    sudo usermod -aG docker "$(whoami)"
 
-    echo "    - Configurando Git (PREENCHA AQUI!)..."
+    echo "    - Configurando Git..."
     git config --global user.name "Tester"
     git config --global user.email "tester@example.com"
     git config --global init.defaultBranch main
@@ -148,13 +182,24 @@ configure_system() {
 
 configure_zsh() {
     echo "👽 Configurando Zsh, Oh My Zsh e plugins..."
-    if [ ! -d "$HOME/.oh-my-zsh" ]; then sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended; fi
-    OMZ_CUSTOM_PLUGINS="$HOME/.oh-my-zsh/custom/plugins" && OMZ_CUSTOM_THEMES="$HOME/.oh-my-zsh/custom/themes"
-    mkdir -p "$OMZ_CUSTOM_PLUGINS" && mkdir -p "$OMZ_CUSTOM_THEMES"
-    if [ ! -d "$OMZ_CUSTOM_PLUGINS/zsh-autosuggestions" ]; then git clone https://github.com/zsh-users/zsh-autosuggestions "$OMZ_CUSTOM_PLUGINS/zsh-autosuggestions"; fi
-    if [ ! -d "$OMZ_CUSTOM_PLUGINS/zsh-syntax-highlighting" ]; then git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$OMZ_CUSTOM_PLUGINS/zsh-syntax-highlighting"; fi
-    if [ -f "./.zshrc" ]; then [ -f "$HOME/.zshrc" ] && mv "$HOME/.zshrc" "$HOME/.zshrc.omz-default-bak"; cp "./.zshrc" "$HOME/.zshrc"; fi
-    if [[ "$SHELL" != */zsh ]]; then sudo chsh -s "$(which zsh)" "$USER"; fi
+    if [ ! -d "$HOME/.oh-my-zsh" ]; then
+        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    fi
+
+    OMZ_CUSTOM_PLUGINS="$HOME/.oh-my-zsh/custom/plugins"
+    mkdir -p "$OMZ_CUSTOM_PLUGINS"
+
+    if [ ! -d "$OMZ_CUSTOM_PLUGINS/zsh-autosuggestions" ]; then
+        git clone https://github.com/zsh-users/zsh-autosuggestions "$OMZ_CUSTOM_PLUGINS/zsh-autosuggestions"
+    fi
+    if [ ! -d "$OMZ_CUSTOM_PLUGINS/zsh-syntax-highlighting" ]; then
+        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$OMZ_CUSTOM_PLUGINS/zsh-syntax-highlighting"
+    fi
+
+    if [[ "$SHELL" != */zsh ]]; then
+        echo "    - Definindo Zsh como shell padrão..."
+        sudo chsh -s "$(which zsh)" "$(whoami)"
+    fi
 }
 
 cleanup() {
@@ -165,7 +210,7 @@ cleanup() {
 
 # --- Execução Principal ---
 main() {
-    echo "🚀 Iniciando setup do ambiente CLI v17..."
+    echo "🚀 Iniciando setup do ambiente CLI (Edição Dotfiles)..."
     install_base_packages
     install_pyenv_and_python_versions
     install_nvm_and_nodejs
@@ -173,6 +218,7 @@ main() {
     add_custom_repos_and_install
     install_extra_binaries
     install_pipx_packages
+    stow_dotfiles
     configure_system
     configure_zsh
     cleanup

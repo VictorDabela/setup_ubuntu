@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # Script de Setup de Ambiente de Desenvolvimento - Ubuntu 24.04 (Noble Numbat)
-# v25 - Adicionado NeoVim
+# Versão Final - Edição Dotfiles com Stow
 # ==============================================================================
 set -e
 
@@ -12,7 +12,7 @@ export TZ=America/Sao_Paulo
 UBUNTU_RELEASE_NAME=$(lsb_release -cs)
 APT_PACKAGES=(
     # Essenciais e Build
-    build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates ubuntu-restricted-extras
+    stow build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates ubuntu-restricted-extras
     # Dependências de build para pyenv
     libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
     # Shell, Terminal e Utilitários
@@ -24,7 +24,7 @@ APT_PACKAGES=(
     # Ferramentas CLI Modernas e Monitores
     bat eza fd-find ripgrep zoxide btop
 )
-PIPX_PACKAGES=(pipenv uv docker-compose pre-commit)
+PIPX_PACKAGES=(pipenv uv pre-commit)
 PYTHON_VERSIONS_TO_INSTALL=(3.12.3 3.10.13)
 PYTHON_GLOBAL_VERSION=3.12.3
 FLATPAKS=()
@@ -35,6 +35,8 @@ install_base_packages() {
     echo "📦 Instalando pacotes base do APT..."
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
     echo $TZ > /etc/timezone
+
+    sudo apt-get clean
 
     # Pré-aceita a licença das fontes da Microsoft para modo não-interativo
     echo "ttf-mscorefonts-installer ttf-mscorefonts-installer/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
@@ -47,7 +49,7 @@ install_nvm_and_nodejs() {
     echo "📦 Instalando NVM (Node Version Manager), Node.js (LTS) e Yarn..."
 
     # Instala o NVM
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    curl -o- -L https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 
     # Carrega o NVM no ambiente atual do script para poder usá-lo imediatamente
     export NVM_DIR="$HOME/.nvm"
@@ -258,24 +260,34 @@ install_pipx_packages() {
     done
 }
 
+stow_dotfiles() {
+    echo "🔗 Gerenciando dotfiles com Stow..."
+
+    local SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+    local REPO_ROOT=$( dirname "$SCRIPT_DIR" )
+
+    echo "    - Linkando zsh..."
+    stow --dir=$REPO_ROOT --target=$HOME -R zsh
+
+    echo "    - Linkando hyper..."
+    stow --dir=$REPO_ROOT --target=$HOME -R hyper
+}
+
 # --- Configuração ---
 configure_apps() {
-    echo "📲 Configurando arquivos de aplicativos (Hyper, Insomnia)..."
-    if [ -f "./.hyper.js" ]; then
-        echo "    - Configuração do Hyper (.hyper.js) encontrada. Copiando..."
-        cp "./.hyper.js" "$HOME/.hyper.js"
-    fi
-    if [ -f "./insomnia_config.tar.gz" ]; then
-        echo "    - Backup do Insomnia (insomnia_config.tar.gz) encontrado. Restaurando..."
+    echo "📲 Configurando arquivos de aplicativos (Insomnia)..."
+    # A lógica do Insomnia permanece, mas com o caminho corrigido
+    if [ -f "../insomnia_config.tar.gz" ]; then
+        echo "    - Backup do Insomnia encontrado. Restaurando..."
         mkdir -p "$HOME/.config"
-        tar -xzf "./insomnia_config.tar.gz" -C "$HOME/.config/"
+        tar -xzf "../insomnia_config.tar.gz" -C "$HOME/.config/"
     fi
 }
 
 configure_system() {
     echo "⚙️  Configurando o sistema e atalhos..."
     sudo groupadd -f docker
-    sudo usermod -aG docker "$USER"
+    sudo usermod -aG docker "$(whoami)"
 
     echo "    - Configurando Git (PREENCHA AQUI!)..."
     git config --global user.name "Seu Nome"
@@ -294,16 +306,24 @@ configure_system() {
     sudo update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/bin/hyper 50
     sudo update-alternatives --set x-terminal-emulator /usr/bin/hyper
 
-    echo "    - Configurando atalho do Flameshot para a tecla Print Screen..."
-    gsettings set org.gnome.settings-daemon.plugins.media-keys screenshot '[]'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys area-screenshot '[]'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys window-screenshot '[]'
 
-    CUSTOM_KEYBINDING_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH} name 'Flameshot'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH} command 'flameshot gui'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH} binding 'Print'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['${CUSTOM_KEYBINDING_PATH}']"
+    echo "    - Configurando atalhos de teclado..."
+    # Configura o Flameshot para a tecla Print Screen
+    local CUSTOM_KEYBINDING_PATH_FLAMESHOT="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+    gsettings set org.gnome.settings-daemon.plugins.media-keys screenshot '[]'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} name 'Flameshot'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} command 'flameshot gui'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} binding 'Print'
+
+    # --- ADICIONADO AQUI ---
+    # Configura o Hyper para a tecla Super+T
+    local CUSTOM_KEYBINDING_PATH_TERM="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} name 'Abrir Terminal'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} command 'hyper'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} binding '<Super>t'
+
+    # Adiciona os dois atalhos customizados à lista de atalhos ativos
+    gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['${CUSTOM_KEYBINDING_PATH_FLAMESHOT}', '${CUSTOM_KEYBINDING_PATH_TERM}']"
 }
 
 configure_zsh() {
@@ -331,13 +351,13 @@ configure_zsh() {
         git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$OMZ_CUSTOM_THEMES/powerlevel10k"
     fi
 
-    if [ -f "./.zshrc" ]; then
-        [ -f "$HOME/.zshrc" ] && mv "$HOME/.zshrc" "$HOME/.zshrc.omz-default-bak"
-        cp "./.zshrc" "$HOME/.zshrc"
-    fi
+    # if [ -f "./.zshrc" ]; then
+    #     [ -f "$HOME/.zshrc" ] && mv "$HOME/.zshrc" "$HOME/.zshrc.omz-default-bak"
+    #     cp "./.zshrc" "$HOME/.zshrc"
+    # fi
 
     if [[ "$SHELL" != */zsh ]]; then
-        sudo chsh -s "$(which zsh)" "$USER"
+        sudo chsh -s "$(which zsh)" "$(whoami)"
     fi
 }
 
@@ -354,7 +374,6 @@ main() {
     install_pyenv_and_python_versions
     install_nvm_and_nodejs
     install_aws_tools
-    # A função install_extra_ppas foi removida
     install_custom_themes
     add_custom_repos_and_install
     install_deb_packages
@@ -363,6 +382,7 @@ main() {
     install_vscode_extensions
     install_nerd_fonts
     install_pipx_packages
+    stow_dotfiles
     configure_apps
     configure_system
     configure_zsh

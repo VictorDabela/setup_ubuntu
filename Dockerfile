@@ -22,8 +22,8 @@ WORKDIR /home/victor/setup
 COPY --chown=victor:victor . .
 
 # Dá permissão de execução para o script
-RUN chmod +x ./setup_ubuntu_cli.sh
+RUN chmod +x ./scripts/setup_ubuntu_cli.sh
 
 # Comando que será executado ao iniciar o container
 # Ele roda o script e depois fica "dormindo" para que possamos inspecionar o container
-CMD ["/bin/bash", "-c", "./setup_ubuntu_cli.sh; sleep infinity"]
+CMD ["/bin/bash", "-c", "./scripts/setup_ubuntu_cli.sh; sleep infinity"]
