@@ -11,8 +11,9 @@ export TZ=America/Sao_Paulo
 
 UBUNTU_RELEASE_NAME=$(lsb_release -cs)
 APT_PACKAGES=(
-    # Essenciais e Build
-    stow build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates ubuntu-restricted-extras
+    dbus-x11
+    # Essenciais, Build e Stow
+    stow stow build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates ubuntu-restricted-extras
     # Dependências de build para pyenv
     libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
     # Shell, Terminal e Utilitários
@@ -20,7 +21,7 @@ APT_PACKAGES=(
     # Ferramentas de Desenvolvimento
     python3-pip python3-venv python3-all-dev postgresql-client redis-tools pipx
     # Aplicações GUI
-    flameshot gnome-boxes gnome-tweaks qbittorrent slimbookbattery synaptic ubuntu-cleaner indicator-stickynotes
+    flameshot gnome-boxes gnome-tweaks qbittorrent synaptic
     # Ferramentas CLI Modernas e Monitores
     bat eza fd-find ripgrep zoxide btop
 )
@@ -30,6 +31,23 @@ PYTHON_GLOBAL_VERSION=3.12.3
 FLATPAKS=()
 VSCODE_EXTENSIONS=()
 
+preemptive_cleanup() {
+    echo "🧹 Executando limpeza pesada de repositórios conflitantes..."
+
+    # Remove qualquer arquivo .list/.sources de repositórios que vamos configurar
+    sudo find /etc/apt/sources.list.d/ -type f \( \
+        -name "*microsoft*" -o \
+        -name "*vscode*" -o \
+        -name "*azure*" -o \
+        -name "*numix*" \
+    \) -delete
+
+    # Remove as chaves GPG conflitantes conhecidas
+    sudo rm -f /etc/apt/keyrings/packages.microsoft.gpg /usr/share/keyrings/microsoft.gpg
+
+    echo "✅ Limpeza pesada concluída."
+}
+
 # --- Funções de Instalação ---
 install_base_packages() {
     echo "📦 Instalando pacotes base do APT..."
@@ -37,6 +55,10 @@ install_base_packages() {
     echo $TZ > /etc/timezone
 
     sudo apt-get clean
+
+    # Garante que o sistema não está com pacotes quebrados de uma execução anterior
+    echo "    - Verificando e corrigindo pacotes quebrados..."
+    sudo apt-get --fix-broken install -y
 
     # Pré-aceita a licença das fontes da Microsoft para modo não-interativo
     echo "ttf-mscorefonts-installer ttf-mscorefonts-installer/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
@@ -97,20 +119,27 @@ install_aws_tools() {
     echo "    - Baixando e instalando AWS CLI..."
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -q awscliv2.zip
-    sudo ./aws/install
+    sudo ./aws/install --update
     echo "    - Baixando e instalando AWS SAM CLI..."
     wget -q "https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip" -O "sam.zip"
     unzip -q sam.zip -d sam-installation
-    sudo ./sam-installation/install
+    sudo ./sam-installation/install --update
     cd - > /dev/null
     rm -rf "$TEMP_AWS_DIR"
 }
 
-install_custom_themes() {
-    echo "🎨 Instalando temas customizados (Numix Icon Theme)..."
-    sudo add-apt-repository -y ppa:numix/ppa
-    sudo apt-get update
-    sudo apt-get install -y numix-icon-theme-circle
+# install_custom_themes() {
+#     echo "🎨 Instalando temas"
+#     sudo add-apt-repository -y ppa:numix/ppa
+#     sudo apt-get update
+#     sudo apt-get install -y numix-icon-theme-circle
+# }
+
+install_snap_packages() {
+    echo "📦 Instalando pacotes via Snap..."
+
+    echo "    - Instalando Spotify..."
+    sudo snap install spotify
 }
 
 add_custom_repos_and_install() {
@@ -121,52 +150,42 @@ add_custom_repos_and_install() {
     curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
-     # Microsoft (VS Code, PowerShell, .NET, Azure CLI, Teams)
+    # Microsoft
     wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/packages.microsoft.gpg > /dev/null
-    echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
 
     # Brave Browser
-    sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main"|sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+    curl -fsSL https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/brave-browser-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee /etc/apt/sources.list.d/brave-browser-release.list
 
     # GitHub CLI
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-    sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
-
-    # Spotify
-    curl -sS https://download.spotify.com/debian/pubkey_7A3A762FAFD4A51F.gpg | sudo gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
-    echo "deb http://repository.spotify.com stable non-free" | sudo tee /etc/apt/sources.list.d/spotify.list
 
     # PGAdmin4
     curl -fsSL https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --dearmor -o /usr/share/keyrings/pgadmin4-archieve-keyring.gpg
-    sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/pgadmin4-archieve-keyring.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" > /etc/apt/sources.list.d/pgadmin4.list'
+    echo "deb [signed-by=/usr/share/keyrings/pgadmin4-archieve-keyring.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" | sudo tee /etc/apt/sources.list.d/pgadmin4.list
 
     # Docker
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    sudo chmod a+r /etc/apt/keyrings/docker.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
 
     # HashiCorp (Terraform)
-    wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 
     # Kubernetes (kubectl)
     curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
     echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
-    # Insomnia
-    curl -1sLf 'https://packages.konghq.com/public/insomnia/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/insomnia.gpg
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/insomnia.gpg] https://packages.konghq.com/public/insomnia/deb/ ubuntu-$(lsb_release -cs) non-free" | sudo tee /etc/apt/sources.list.d/insomnia.list
-
     echo "🔄 Atualizando listas de pacotes..."
     sudo apt-get update
 
     echo "📦 Instalando pacotes de repositórios customizados..."
     CUSTOM_APT_PACKAGES=(
-        insomnia google-chrome-stable code powershell azure-cli brave-browser gh spotify-client teams-for-linux dotnet-sdk-8.0 pgadmin4-desktop
+        google-chrome-stable code powershell azure-cli brave-browser gh dotnet-sdk-8.0 pgadmin4-desktop
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
         terraform kubectl
     )
@@ -178,23 +197,21 @@ install_deb_packages() {
     TEMP_DEB_DIR=$(mktemp -d)
     cd "$TEMP_DEB_DIR"
 
+    # A flag "|| true" garante que o script não pare se o dpkg encontrar
+    # um erro de dependência, pois sabemos que o comando seguinte vai corrigi-lo.
+    echo "    - Baixando e instalando Insomnia..."
+    wget -qO insomnia.deb "https://updates.insomnia.rest/downloads/ubuntu/latest" && sudo dpkg -i insomnia.deb || true
+
     echo "    - Baixando e instalando Hyper..."
-    wget -qO hyper.deb "https://releases.hyper.is/download/deb"
-    sudo dpkg -i hyper.deb
+    wget -qO hyper.deb "https://releases.hyper.is/download/deb" && sudo dpkg -i hyper.deb || true
 
     echo "    - Baixando e instalando Discord..."
-    wget -qO discord.deb "https://discord.com/api/download?platform=linux&format=deb"
-    sudo dpkg -i discord.deb
+    wget -qO discord.deb "https://discord.com/api/download?platform=linux&format=deb" && sudo dpkg -i discord.deb || true
 
     echo "    - Baixando e instalando TeamViewer..."
-    wget -qO teamviewer.deb "https://download.teamviewer.com/download/linux/teamviewer_amd64.deb"
-    sudo dpkg -i teamviewer.deb
+    wget -qO teamviewer.deb "https://download.teamviewer.com/download/linux/teamviewer_amd64.deb" && sudo dpkg -i teamviewer.deb || true
 
-    echo "    - Baixando e instalando Zoom..."
-    wget -qO zoom.deb "https://zoom.us/client/latest/zoom_amd64.deb"
-    sudo dpkg -i zoom.deb
-
-    echo "    - Corrigindo possíveis dependências quebradas..."
+    echo "    - Corrigindo TODAS as dependências quebradas de uma vez..."
     sudo apt-get install -f -y
 
     cd - > /dev/null
@@ -273,6 +290,27 @@ stow_dotfiles() {
     stow --dir=$REPO_ROOT --target=$HOME -R hyper
 }
 
+stow_dotfiles() {
+    echo "🔗 Gerenciando dotfiles com Stow..."
+
+    # Descobre o caminho absoluto para a raiz do repositório (a pasta acima de 'scripts')
+    local SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+    local REPO_ROOT=$( dirname "$SCRIPT_DIR" )
+
+    # Remove os arquivos padrão que podem conflitar com o stow antes de criar os links
+    echo "    - Removendo arquivos de configuração padrão para evitar conflitos..."
+    rm -f "$HOME/.zshrc"
+    rm -f "$HOME/.hyper.js"
+
+    echo "    - Linkando zsh..."
+    # A flag -d diz ao stow onde está a pasta com os 'pacotes' (zsh, etc.)
+    # A flag -t diz para onde os links devem ser criados (nossa home)
+    stow --dir=$REPO_ROOT --target=$HOME -R zsh
+
+    echo "    - Linkando hyper..."
+    stow --dir=$REPO_ROOT --target=$HOME -R hyper
+}
+
 # --- Configuração ---
 configure_apps() {
     echo "📲 Configurando arquivos de aplicativos (Insomnia)..."
@@ -290,32 +328,37 @@ configure_system() {
     sudo usermod -aG docker "$(whoami)"
 
     echo "    - Configurando Git (PREENCHA AQUI!)..."
-    git config --global user.name "Seu Nome"
-    git config --global user.email "seu-email@exemplo.com"
+    git config --global user.name "victor.dabela"
+    git config --global user.email "victor.dabela@linx.com.br"
     git config --global init.defaultBranch main
 
     echo "    - Aplicando temas visuais..."
     THEME_GTK="Yaru-dark"
-    THEME_ICONS="Numix-Circle"
+    THEME_ICONS="Yaru"
     THEME_CURSOR="Yaru"
     gsettings set org.gnome.desktop.interface gtk-theme "$THEME_GTK"
     gsettings set org.gnome.desktop.interface icon-theme "$THEME_ICONS"
     gsettings set org.gnome.desktop.interface cursor-theme "$THEME_CURSOR"
 
     echo "    - Definindo Hyper como terminal padrão..."
-    sudo update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/bin/hyper 50
-    sudo update-alternatives --set x-terminal-emulator /usr/bin/hyper
-
+    sudo update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/local/bin/hyper 50
+    sudo update-alternatives --set x-terminal-emulator /usr/local/bin/hyper
 
     echo "    - Configurando atalhos de teclado..."
-    # Configura o Flameshot para a tecla Print Screen
+
+    # Desabilita os novos atalhos de screenshot do GNOME 46 para evitar conflitos
+    echo "      - Desabilitando atalhos de screenshot padrão do GNOME..."
+    gsettings set org.gnome.shell.keybindings screenshot '[]'
+    gsettings set org.gnome.shell.keybindings show-screenshot-ui '[]'
+    gsettings set org.gnome.shell.keybindings screenshot-window '[]'
+
+    # Cria o novo atalho customizado para o Flameshot (esta parte continua igual e correta)
+    echo "      - Criando atalho customizado para o Flameshot..."
     local CUSTOM_KEYBINDING_PATH_FLAMESHOT="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
-    gsettings set org.gnome.settings-daemon.plugins.media-keys screenshot '[]'
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} name 'Flameshot'
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} command 'flameshot gui'
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} binding 'Print'
 
-    # --- ADICIONADO AQUI ---
     # Configura o Hyper para a tecla Super+T
     local CUSTOM_KEYBINDING_PATH_TERM="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} name 'Abrir Terminal'
@@ -370,11 +413,14 @@ cleanup() {
 # --- Execução Principal ---
 main() {
     echo "🚀 Iniciando setup do ambiente de desenvolvimento v17..."
+
+    preemptive_cleanup
+
     install_base_packages
     install_pyenv_and_python_versions
     install_nvm_and_nodejs
     install_aws_tools
-    install_custom_themes
+    # install_custom_themes
     add_custom_repos_and_install
     install_deb_packages
     install_extra_binaries
@@ -386,6 +432,9 @@ main() {
     configure_apps
     configure_system
     configure_zsh
+
+    stow_dotfiles
+
     cleanup
 
     echo "✅ Setup concluído com sucesso!"
