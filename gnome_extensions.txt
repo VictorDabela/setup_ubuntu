@@ -1,12 +1,29 @@
+# ==============================================================================
+# Extensões do GNOME Shell - Referência para instalação manual pós-setup
+# Instale via https://extensions.gnome.org/ após login na sessão GNOME
+#
+# NOTA: Pop!_OS 24.04+ usa COSMIC (desktop próprio em Rust), NÃO GNOME.
+#       Estas extensões NÃO se aplicam ao Pop!_OS com COSMIC.
+#       Configure temas/atalhos via Configurações do COSMIC.
+# ==============================================================================
+
+# === Universal (qualquer desktop GNOME — Ubuntu, Fedora, etc.) ===
 user-theme@gnome-shell-extensions.gcampax.github.com
 clipboard-indicator@tudmotu.com
 audio-selector@harald65.simon.gmail.com
 bluetooth-battery@michalw.github.com
-cosmic-dock@system76.com
-cosmic-workspaces@system76.com
 ding@rastersoft.com
-pop-cosmic@system76.com
-pop-shell@system76.com
-popx11gestures@system76.com
-system76-power@system76.com
-ubuntu-appindicators@ubuntu.com
+appindicatorsupport@rgcjonas.gmail.com  # Tray icons (upstream, atualiza mais rápido que ubuntu-appindicators)
+
+# === Ubuntu only (funcionalidades extras não incluídas por padrão) ===
+# tiling-assistant@leleat-on-github       # Tiling window manager
+# dash-to-dock@micxgx.gmail.com           # Dock persistente
+# forge@jmmaranan.com                     # Tiling avançado (alternativa mais completa)
+
+# === Pop!_OS legado (GNOME-based, antes do COSMIC) — NÃO instale em COSMIC ===
+# cosmic-dock@system76.com
+# cosmic-workspaces@system76.com
+# pop-cosmic@system76.com
+# pop-shell@system76.com
+# popx11gestures@system76.com
+# system76-power@system76.com

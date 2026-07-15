@@ -1,11 +1,3 @@
-# Ativação do Pyenv
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-
-# Ativação do Zoxide ("cd inteligente")
-eval "$(zoxide init zsh)"
-
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
@@ -28,7 +20,7 @@ export ZSH="$HOME/.oh-my-zsh"
 # load a random theme each time oh-my-zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
 # See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
-ZSH_THEME="spaceship"
+ZSH_THEME="spaceship-prompt/spaceship"
 # ZSH_THEME="powerlevel10k/powerlevel10k"
 SPACESHIP_TIME_SHOW=true
 
@@ -92,11 +84,13 @@ SPACESHIP_TIME_SHOW=true
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git zsh-completions zsh-autosuggestions)
+plugins=(git zsh-completions zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
-export KUBECONFIG=`find ~/.kube -maxdepth 1 -type f | sed  ':a;N;$!ba;s/\n/:/g'`
+if [ -d "$HOME/.kube" ]; then
+  export KUBECONFIG=`find ~/.kube -maxdepth 1 -type f | sed  ':a;N;$!ba;s/\n/:/g'`
+fi
 
 # User configuration
 
@@ -129,21 +123,35 @@ alias pir='f() { pip3 install -r requirements.txt };f' # instala dependencias do
 alias penv='f() { python -m venv $1 && source venv/bin/activate && pir };f' # inicializa o venv
 #alias dabela
 alias konfig='python3 -m maestro kubeconfig ~/.kube/config' # regera as autenticações do kubernetes 
-alias zonfig='vim ~/.zshrc' # abre arquivo de config do oh my zsh no Vim
+alias zonfig='nvim ~/.zshrc' # abre arquivo de config do oh my zsh no Vim
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-# PIP Settings.
-export PIP_INDEX_URL=https://nodis:0Vi9m1KYo7Py@pypi.nodis.com.br/simple
-export PIP_EXTRA_INDEX_URL=https://pypi.python.org/simple/
+# Ativação do Pyenv
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+
+# Ativação do Zoxide ("cd inteligente")
+eval "$(zoxide init zsh)"
+
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 export DOTNET_ROOT=/snap/dotnet-sdk/current
 
-# vault config
-export VAULT_ADDR=https://vault.nodis.com.br
-#export VAULT_ADDR=http://127.0.0.1:8200
+# Vault config
+export VAULT_ADDR="https://vault.example.com"
+#export VAULT_ADDR="http://127.0.0.1:8200"
 export NODIS_VAULT_KEYNAME="credencial"
+
+# Azure Artifacts - UV package manager
+export UV_INDEX_LINX_CATALOGO_USERNAME="az"
+export UV_INDEX_LINX_CATALOGO_PASSWORD="<YOUR_TOKEN_HERE>"
+export UV_PUBLISH_USERNAME="az"
+export UV_PUBLISH_PASSWORD="<YOUR_TOKEN_HERE>"
+
+# Created by `pipx`
+export PATH="$PATH:$HOME/.local/bin"

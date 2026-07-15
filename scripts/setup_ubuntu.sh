@@ -1,95 +1,90 @@
 #!/bin/bash
 # ==============================================================================
 # Script de Setup de Ambiente de Desenvolvimento - Ubuntu 24.04 (Noble Numbat)
-# Versão Final - Edição Dotfiles com Stow
+# Versão Final Consolidada
 # ==============================================================================
 set -e
 
 # --- Variáveis de Configuração ---
-# Define o fuso horário para modo não-interativo
 export TZ=America/Sao_Paulo
-
 UBUNTU_RELEASE_NAME=$(lsb_release -cs)
+
+# --- Detecção de Distro ---
+if grep -qi "pop" /etc/os-release; then
+    DISTRO="popos"
+elif grep -qi "ubuntu" /etc/os-release; then
+    DISTRO="ubuntu"
+else
+    DISTRO="unknown"
+fi
+echo "🖥️  Distro detectada: ${DISTRO}"
+
+# --- Pacotes Base (universais) ---
 APT_PACKAGES=(
-    dbus-x11
-    # Essenciais, Build e Stow
-    stow stow build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates ubuntu-restricted-extras
+    # Essenciais, Build e Ferramentas de Sistema
+    stow build-essential curl wget git gnupg software-properties-common apt-transport-https ca-certificates dbus-x11
     # Dependências de build para pyenv
     libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-    # Shell, Terminal e Utilitários
-    zsh vim neovim jq tree unzip # <-- ADICIONADO AQUI
+    # Shell, Terminal e Editores
+    zsh vim neovim jq tree unzip
     # Ferramentas de Desenvolvimento
     python3-pip python3-venv python3-all-dev postgresql-client redis-tools pipx
     # Aplicações GUI
-    flameshot gnome-boxes gnome-tweaks qbittorrent synaptic
+    qbittorrent
+    # Suporte a AppImages
+    libfuse2t64
     # Ferramentas CLI Modernas e Monitores
     bat eza fd-find ripgrep zoxide btop
 )
+
+# --- Pacotes condicionais por distro ---
+if [[ "$DISTRO" == "ubuntu" ]]; then
+    # GNOME-specific: extensões, tweaks, etc. (Pop!_OS 24.04+ usa COSMIC, não GNOME)
+    APT_PACKAGES+=(gnome-boxes gnome-tweaks gnome-shell-extensions)
+fi
 PIPX_PACKAGES=(pipenv uv pre-commit)
 PYTHON_VERSIONS_TO_INSTALL=(3.12.3 3.10.13)
 PYTHON_GLOBAL_VERSION=3.12.3
-FLATPAKS=()
-VSCODE_EXTENSIONS=()
+FLATPAKS=(md.obsidian.Obsidian org.flameshot.Flameshot)
+SNAP_PACKAGES=(spotify)
+SNAP_CLASSIC_PACKAGES=(ghostty)
+
+# --- Configuração Pessoal (PREENCHA ANTES DE RODAR!) ---
+GIT_USER_NAME="Seu Nome"
+GIT_USER_EMAIL="seu-email@exemplo.com"
+
+# --- Funções de Limpeza e Instalação ---
 
 preemptive_cleanup() {
     echo "🧹 Executando limpeza pesada de repositórios conflitantes..."
-
-    # Remove qualquer arquivo .list/.sources de repositórios que vamos configurar
-    sudo find /etc/apt/sources.list.d/ -type f \( \
-        -name "*microsoft*" -o \
-        -name "*vscode*" -o \
-        -name "*azure*" -o \
-        -name "*numix*" \
-    \) -delete
-
-    # Remove as chaves GPG conflitantes conhecidas
-    sudo rm -f /etc/apt/keyrings/packages.microsoft.gpg /usr/share/keyrings/microsoft.gpg
-
+    sudo find /etc/apt/sources.list.d/ -type f \( -name "*microsoft*" -o -name "*vscode*" -o -name "*azure*" -o -name "*numix*" \) -delete
+    sudo rm -f /etc/apt/sources.list.d/spotify.list
+    sudo rm -f /etc/apt/keyrings/packages.microsoft.gpg /usr/share/keyrings/microsoft.gpg /etc/apt/keyrings/spotify.gpg
     echo "✅ Limpeza pesada concluída."
 }
 
-# --- Funções de Instalação ---
 install_base_packages() {
     echo "📦 Instalando pacotes base do APT..."
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
-    echo $TZ > /etc/timezone
-
+    sudo ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ | sudo tee /etc/timezone > /dev/null
     sudo apt-get clean
-
-    # Garante que o sistema não está com pacotes quebrados de uma execução anterior
     echo "    - Verificando e corrigindo pacotes quebrados..."
     sudo apt-get --fix-broken install -y
-
-    # Pré-aceita a licença das fontes da Microsoft para modo não-interativo
-    echo "ttf-mscorefonts-installer ttf-mscorefonts-installer/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-
     sudo apt-get update
     sudo apt-get install -y "${APT_PACKAGES[@]}"
 }
 
 install_nvm_and_nodejs() {
     echo "📦 Instalando NVM (Node Version Manager), Node.js (LTS) e Yarn..."
-
-    # Instala o NVM
-    curl -o- -L https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-
-    # Carrega o NVM no ambiente atual do script para poder usá-lo imediatamente
+    curl -o- -L https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-
     echo "    - Instalando a versão LTS mais recente do Node.js..."
     nvm install --lts
     nvm use --lts
     nvm alias default 'lts/*'
-
     echo "    - Instalando Yarn globalmente via npm..."
     npm install -g yarn
-
-    echo "    - Versões instaladas:"
-    node -v
-    npm -v
-    yarn -v
+    echo "    - Versões instaladas:"; node -v; npm -v; yarn -v
 }
 
 install_pyenv_and_python_versions() {
@@ -113,123 +108,92 @@ install_pyenv_and_python_versions() {
 }
 
 install_aws_tools() {
-    echo "📦 Instalando ferramentas da AWS (AWS CLI, SAM CLI)..."
-    TEMP_AWS_DIR=$(mktemp -d)
-    cd "$TEMP_AWS_DIR"
-    echo "    - Baixando e instalando AWS CLI..."
+    echo "📦 Instalando/Atualizando ferramentas da AWS (AWS CLI, SAM CLI)..."
+    TEMP_AWS_DIR=$(mktemp -d); cd "$TEMP_AWS_DIR"
+    echo "    - Baixando e instalando/atualizando AWS CLI..."
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     unzip -q awscliv2.zip
     sudo ./aws/install --update
-    echo "    - Baixando e instalando AWS SAM CLI..."
+    echo "    - Baixando e instalando/atualizando AWS SAM CLI..."
     wget -q "https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip" -O "sam.zip"
     unzip -q sam.zip -d sam-installation
     sudo ./sam-installation/install --update
-    cd - > /dev/null
-    rm -rf "$TEMP_AWS_DIR"
-}
-
-# install_custom_themes() {
-#     echo "🎨 Instalando temas"
-#     sudo add-apt-repository -y ppa:numix/ppa
-#     sudo apt-get update
-#     sudo apt-get install -y numix-icon-theme-circle
-# }
-
-install_snap_packages() {
-    echo "📦 Instalando pacotes via Snap..."
-
-    echo "    - Instalando Spotify..."
-    sudo snap install spotify
+    cd - > /dev/null; rm -rf "$TEMP_AWS_DIR"
 }
 
 add_custom_repos_and_install() {
-    echo "📦 Adicionando repositórios de terceiros..."
+    echo "📦 Adicionando repositórios de terceiros de forma silenciosa..."
     sudo install -m 0755 -d /etc/apt/keyrings
 
     # Google Chrome
-    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/google-chrome.gpg
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
     # Microsoft
-    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/packages.microsoft.gpg > /dev/null
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/packages.microsoft.gpg
+    echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
 
     # Brave Browser
-    curl -fsSL https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/brave-browser-archive-keyring.gpg
+    curl -fsSL https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg | sudo tee /usr/share/keyrings/brave-browser-archive-keyring.gpg > /dev/null
     echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee /etc/apt/sources.list.d/brave-browser-release.list
 
     # GitHub CLI
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
 
     # PGAdmin4
-    curl -fsSL https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --dearmor -o /usr/share/keyrings/pgadmin4-archieve-keyring.gpg
+    curl -fsSL https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/pgadmin4-archieve-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/pgadmin4-archieve-keyring.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" | sudo tee /etc/apt/sources.list.d/pgadmin4.list
 
     # Docker
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
 
     # HashiCorp (Terraform)
-    curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 
     # Kubernetes (kubectl)
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+    # Bruno (API Client)
+    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x9FA6017ECABE0266" | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/bruno.gpg
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/bruno.gpg] http://debian.usebruno.com/ bruno stable" | sudo tee /etc/apt/sources.list.d/bruno.list
 
     echo "🔄 Atualizando listas de pacotes..."
     sudo apt-get update
 
     echo "📦 Instalando pacotes de repositórios customizados..."
     CUSTOM_APT_PACKAGES=(
-        google-chrome-stable code powershell azure-cli brave-browser gh dotnet-sdk-8.0 pgadmin4-desktop
+        google-chrome-stable brave-browser
+        code powershell azure-cli gh dotnet-sdk-8.0 pgadmin4-desktop
         docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-        terraform kubectl
+        terraform kubectl bruno
     )
     sudo apt-get install -y "${CUSTOM_APT_PACKAGES[@]}"
 }
 
+
 install_deb_packages() {
     echo "📦 Instalando pacotes .deb..."
-    TEMP_DEB_DIR=$(mktemp -d)
-    cd "$TEMP_DEB_DIR"
+    TEMP_DEB_DIR=$(mktemp -d); cd "$TEMP_DEB_DIR"
 
-    # A flag "|| true" garante que o script não pare se o dpkg encontrar
-    # um erro de dependência, pois sabemos que o comando seguinte vai corrigi-lo.
-    echo "    - Baixando e instalando Insomnia..."
-    wget -qO insomnia.deb "https://updates.insomnia.rest/downloads/ubuntu/latest" && sudo dpkg -i insomnia.deb || true
+    echo "    - Baixando e instalando Discord..."; wget -qO discord.deb "https://discord.com/api/download?platform=linux&format=deb" && sudo dpkg -i discord.deb || true
+    echo "    - Baixando e instalando TeamViewer..."; wget -qO teamviewer.deb "https://download.teamviewer.com/download/linux/teamviewer_amd64.deb" && sudo dpkg -i teamviewer.deb || true
+    echo "    - Baixando e instalando AppImageLauncher..."; wget -qO appimagelauncher.deb "https://github.com/TheAssassin/AppImageLauncher/releases/download/v3.0.0-beta-3/appimagelauncher_3.0.0-beta-2-gha287.96cb937_amd64.deb" && sudo dpkg -i appimagelauncher.deb || true
 
-    echo "    - Baixando e instalando Hyper..."
-    wget -qO hyper.deb "https://releases.hyper.is/download/deb" && sudo dpkg -i hyper.deb || true
-
-    echo "    - Baixando e instalando Discord..."
-    wget -qO discord.deb "https://discord.com/api/download?platform=linux&format=deb" && sudo dpkg -i discord.deb || true
-
-    echo "    - Baixando e instalando TeamViewer..."
-    wget -qO teamviewer.deb "https://download.teamviewer.com/download/linux/teamviewer_amd64.deb" && sudo dpkg -i teamviewer.deb || true
-
-    echo "    - Corrigindo TODAS as dependências quebradas de uma vez..."
-    sudo apt-get install -f -y
-
-    cd - > /dev/null
-    rm -rf "$TEMP_DEB_DIR"
+    echo "    - Corrigindo TODAS as dependências quebradas de uma vez..."; sudo apt-get install -f -y
+    cd - > /dev/null; rm -rf "$TEMP_DEB_DIR"
 }
 
 install_extra_binaries() {
     echo "📦 Instalando binários extras (k9s)..."
-    TEMP_BIN_DIR=$(mktemp -d)
-    cd "$TEMP_BIN_DIR"
-
-    echo "    - Baixando e instalando k9s..."
-    wget -qO k9s.tar.gz "https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_amd64.tar.gz"
-    tar -xzf k9s.tar.gz
-    sudo install k9s /usr/local/bin
-
-    cd - > /dev/null
-    rm -rf "$TEMP_BIN_DIR"
+    TEMP_BIN_DIR=$(mktemp -d); cd "$TEMP_BIN_DIR"
+    echo "    - Baixando e instalando k9s..."; wget -qO k9s.tar.gz "https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_amd64.tar.gz"; tar -xzf k9s.tar.gz; sudo install k9s /usr/local/bin
+    cd - > /dev/null; rm -rf "$TEMP_BIN_DIR"
 }
 
 install_flatpaks() {
@@ -241,218 +205,192 @@ install_flatpaks() {
     done
 }
 
-install_vscode_extensions() {
-    echo "💻 Verificando extensões do VS Code..."
-    if command -v code &> /dev/null && [ ${#VSCODE_EXTENSIONS[@]} -gt 0 ]; then
-        for ext in "${VSCODE_EXTENSIONS[@]}"; do
-            code --install-extension "$ext"
-        done
-    else
-        echo "⚠️  Lista de extensões vazia ou VS Code não encontrado. Pulei a instalação."
-    fi
+install_snap_packages() {
+    echo "📦 Instalando pacotes via Snap..."
+    for pkg in "${SNAP_PACKAGES[@]}"; do
+        echo "    - Instalando Snap: ${pkg}"
+        sudo snap install "$pkg"
+    done
+    for pkg in "${SNAP_CLASSIC_PACKAGES[@]}"; do
+        echo "    - Instalando Snap (classic): ${pkg}"
+        sudo snap install "$pkg" --classic
+    done
 }
 
 install_nerd_fonts() {
     echo "🔤 Instalando Nerd Fonts (FiraCode)..."
-    local fonts_dir="$HOME/.local/share/fonts"
-    if [ ! -d "$fonts_dir/FiraCode" ]; then
-        mkdir -p "$fonts_dir"
-        cd "$fonts_dir"
-        wget -q -O FiraCode.zip https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraCode.zip
-        unzip -q FiraCode.zip -d FiraCode
-        rm FiraCode.zip
-        fc-cache -f -v
-        cd - > /dev/null
-        echo "    - Fonte FiraCode Nerd Font instalada!"
-    else
-        echo "    - Fonte FiraCode Nerd Font já parece estar instalada."
-    fi
+    local fonts_dir="$HOME/.local/share/fonts"; if [ ! -d "$fonts_dir/FiraCode" ]; then mkdir -p "$fonts_dir"; cd "$fonts_dir"; wget -q -O FiraCode.zip https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraCode.zip; unzip -q FiraCode.zip -d FiraCode; rm FiraCode.zip; fc-cache -f -v; cd - > /dev/null; echo "    - Fonte FiraCode Nerd Font instalada!"; else echo "    - Fonte FiraCode Nerd Font já parece estar instalada."; fi
 }
 
 install_pipx_packages() {
     echo "🐍 Instalando ferramentas Python CLI com pipx..."
     export PATH="$PATH:$HOME/.local/bin"
-    for pkg in "${PIPX_PACKAGES[@]}"; do
-        pipx install "$pkg"
-    done
-}
-
-stow_dotfiles() {
-    echo "🔗 Gerenciando dotfiles com Stow..."
-
-    local SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-    local REPO_ROOT=$( dirname "$SCRIPT_DIR" )
-
-    echo "    - Linkando zsh..."
-    stow --dir=$REPO_ROOT --target=$HOME -R zsh
-
-    echo "    - Linkando hyper..."
-    stow --dir=$REPO_ROOT --target=$HOME -R hyper
-}
-
-stow_dotfiles() {
-    echo "🔗 Gerenciando dotfiles com Stow..."
-
-    # Descobre o caminho absoluto para a raiz do repositório (a pasta acima de 'scripts')
-    local SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-    local REPO_ROOT=$( dirname "$SCRIPT_DIR" )
-
-    # Remove os arquivos padrão que podem conflitar com o stow antes de criar os links
-    echo "    - Removendo arquivos de configuração padrão para evitar conflitos..."
-    rm -f "$HOME/.zshrc"
-    rm -f "$HOME/.hyper.js"
-
-    echo "    - Linkando zsh..."
-    # A flag -d diz ao stow onde está a pasta com os 'pacotes' (zsh, etc.)
-    # A flag -t diz para onde os links devem ser criados (nossa home)
-    stow --dir=$REPO_ROOT --target=$HOME -R zsh
-
-    echo "    - Linkando hyper..."
-    stow --dir=$REPO_ROOT --target=$HOME -R hyper
+    for pkg in "${PIPX_PACKAGES[@]}"; do pipx install "$pkg"; done
 }
 
 # --- Configuração ---
-configure_apps() {
-    echo "📲 Configurando arquivos de aplicativos (Insomnia)..."
-    # A lógica do Insomnia permanece, mas com o caminho corrigido
-    if [ -f "../insomnia_config.tar.gz" ]; then
-        echo "    - Backup do Insomnia encontrado. Restaurando..."
-        mkdir -p "$HOME/.config"
-        tar -xzf "../insomnia_config.tar.gz" -C "$HOME/.config/"
-    fi
+stow_dotfiles() {
+    echo "🔗 Gerenciando dotfiles com Stow..."
+    local SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+    local REPO_ROOT=$( dirname "$SCRIPT_DIR" )
+    echo "    - Removendo arquivos de configuração padrão para evitar conflitos..."
+    rm -f "$HOME/.zshrc"
+    echo "    - Linkando zsh..."
+    stow --dir=$REPO_ROOT --target=$HOME -R zsh
 }
-
 configure_system() {
     echo "⚙️  Configurando o sistema e atalhos..."
+
+    # Docker
     sudo groupadd -f docker
     sudo usermod -aG docker "$(whoami)"
 
-    echo "    - Configurando Git (PREENCHA AQUI!)..."
-    git config --global user.name "victor.dabela"
-    git config --global user.email "victor.dabela@linx.com.br"
+    # Git
+    echo "    - Configurando Git..."
+    git config --global user.name "$GIT_USER_NAME"
+    git config --global user.email "$GIT_USER_EMAIL"
     git config --global init.defaultBranch main
 
-    echo "    - Aplicando temas visuais..."
-    THEME_GTK="Yaru-dark"
-    THEME_ICONS="Yaru"
-    THEME_CURSOR="Yaru"
-    gsettings set org.gnome.desktop.interface gtk-theme "$THEME_GTK"
-    gsettings set org.gnome.desktop.interface icon-theme "$THEME_ICONS"
-    gsettings set org.gnome.desktop.interface cursor-theme "$THEME_CURSOR"
+    # Terminal padrão (funciona em qualquer DE)
+    echo "    - Definindo Ghostty como terminal padrão..."
+    if command -v ghostty &> /dev/null; then
+        sudo update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator "$(which ghostty)" 50
+        sudo update-alternatives --set x-terminal-emulator "$(which ghostty)"
+    fi
 
-    echo "    - Definindo Hyper como terminal padrão..."
-    sudo update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/local/bin/hyper 50
-    sudo update-alternatives --set x-terminal-emulator /usr/local/bin/hyper
+    # Temas visuais e atalhos (apenas GNOME — Pop!_OS 24.04+ usa COSMIC)
+    if [[ "$DISTRO" != "popos" ]]; then
+        echo "    - Aplicando temas visuais (GNOME)..."
+        gsettings set org.gnome.desktop.interface gtk-theme "Yaru-dark"
+        gsettings set org.gnome.desktop.interface icon-theme "Yaru"
+        gsettings set org.gnome.desktop.interface cursor-theme "Yaru"
 
-    echo "    - Configurando atalhos de teclado..."
+        # Atalhos de teclado (GNOME)
+        echo "    - Configurando atalhos de teclado..."
+        echo "      - Desabilitando atalhos de screenshot padrão do GNOME..."
+        gsettings set org.gnome.shell.keybindings screenshot '[]'
+        gsettings set org.gnome.shell.keybindings show-screenshot-ui '[]'
+        gsettings set org.gnome.shell.keybindings screenshot-window '[]'
 
-    # Desabilita os novos atalhos de screenshot do GNOME 46 para evitar conflitos
-    echo "      - Desabilitando atalhos de screenshot padrão do GNOME..."
-    gsettings set org.gnome.shell.keybindings screenshot '[]'
-    gsettings set org.gnome.shell.keybindings show-screenshot-ui '[]'
-    gsettings set org.gnome.shell.keybindings screenshot-window '[]'
+        echo "      - Criando atalho customizado para o Flameshot..."
+        local CUSTOM_KEYBINDING_PATH_FLAMESHOT="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} name 'Flameshot'
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} command 'flatpak run org.flameshot.Flameshot gui'
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} binding 'Print'
 
-    # Cria o novo atalho customizado para o Flameshot (esta parte continua igual e correta)
-    echo "      - Criando atalho customizado para o Flameshot..."
-    local CUSTOM_KEYBINDING_PATH_FLAMESHOT="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} name 'Flameshot'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} command 'flameshot gui'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_FLAMESHOT} binding 'Print'
+        local CUSTOM_KEYBINDING_PATH_TERM="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} name 'Abrir Terminal'
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} command 'ghostty'
+        gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} binding '<Super>t'
 
-    # Configura o Hyper para a tecla Super+T
-    local CUSTOM_KEYBINDING_PATH_TERM="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} name 'Abrir Terminal'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} command 'hyper'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${CUSTOM_KEYBINDING_PATH_TERM} binding '<Super>t'
+        gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['${CUSTOM_KEYBINDING_PATH_FLAMESHOT}', '${CUSTOM_KEYBINDING_PATH_TERM}']"
+    else
+        echo "    - Pop!_OS com COSMIC detectado. Temas e atalhos GNOME ignorados."
+        echo "    - Configure temas e atalhos via Configurações do COSMIC."
+    fi
+}
+create_initial_config_dirs() {
+    echo "🏗️  Criando diretórios de configuração iniciais..."
 
-    # Adiciona os dois atalhos customizados à lista de atalhos ativos
-    gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['${CUSTOM_KEYBINDING_PATH_FLAMESHOT}', '${CUSTOM_KEYBINDING_PATH_TERM}']"
+    # Cria a pasta .kube para evitar erros no Zsh
+    echo "    - Criando ~/.kube..."
+    mkdir -p ~/.kube
 }
 
 configure_zsh() {
-    echo "👽 Configurando Zsh, Oh My Zsh e plugins..."
+    echo "👽 Configurando a base do Zsh e Oh My Zsh..."
     if [ ! -d "$HOME/.oh-my-zsh" ]; then
         sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
     fi
 
+    if [[ "$SHELL" != */zsh ]]; then
+        echo "    - Definindo Zsh como shell padrão..."
+        sudo chsh -s "$(which zsh)" "$(whoami)"
+    fi
+}
+
+install_zsh_plugins_and_themes() {
+    echo "👽 Instalando plugins e temas do Oh My Zsh..."
     OMZ_CUSTOM_PLUGINS="$HOME/.oh-my-zsh/custom/plugins"
     OMZ_CUSTOM_THEMES="$HOME/.oh-my-zsh/custom/themes"
     mkdir -p "$OMZ_CUSTOM_PLUGINS"
     mkdir -p "$OMZ_CUSTOM_THEMES"
 
+    echo "    - Instalando/Verificando plugins..."
     if [ ! -d "$OMZ_CUSTOM_PLUGINS/zsh-autosuggestions" ]; then
         git clone https://github.com/zsh-users/zsh-autosuggestions "$OMZ_CUSTOM_PLUGINS/zsh-autosuggestions"
     fi
     if [ ! -d "$OMZ_CUSTOM_PLUGINS/zsh-syntax-highlighting" ]; then
         git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$OMZ_CUSTOM_PLUGINS/zsh-syntax-highlighting"
     fi
+    if [ ! -d "$OMZ_CUSTOM_PLUGINS/zsh-completions" ]; then
+        git clone https://github.com/zsh-users/zsh-completions "$OMZ_CUSTOM_PLUGINS/zsh-completions"
+    fi
 
+    echo "    - Instalando/Verificando temas..."
     if [ ! -d "$OMZ_CUSTOM_THEMES/spaceship-prompt" ]; then
         git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$OMZ_CUSTOM_THEMES/spaceship-prompt" --depth=1
     fi
     if [ ! -d "$OMZ_CUSTOM_THEMES/powerlevel10k" ]; then
         git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$OMZ_CUSTOM_THEMES/powerlevel10k"
     fi
-
-    # if [ -f "./.zshrc" ]; then
-    #     [ -f "$HOME/.zshrc" ] && mv "$HOME/.zshrc" "$HOME/.zshrc.omz-default-bak"
-    #     cp "./.zshrc" "$HOME/.zshrc"
-    # fi
-
-    if [[ "$SHELL" != */zsh ]]; then
-        sudo chsh -s "$(which zsh)" "$(whoami)"
-    fi
 }
 
 cleanup() {
-    echo "🧹 Limpando o sistema..."
-    sudo apt-get autoremove -y
+    echo "🧹 Limpando o sistema...";
+    sudo apt-get autoremove -y;
     sudo apt-get clean
 }
 
 # --- Execução Principal ---
 main() {
-    echo "🚀 Iniciando setup do ambiente de desenvolvimento v17..."
-
+    echo "🚀 Iniciando setup do ambiente de desenvolvimento (Edição Final)..."
     preemptive_cleanup
-
     install_base_packages
     install_pyenv_and_python_versions
     install_nvm_and_nodejs
     install_aws_tools
-    # install_custom_themes
     add_custom_repos_and_install
     install_deb_packages
     install_extra_binaries
     install_flatpaks
-    install_vscode_extensions
+    install_snap_packages
     install_nerd_fonts
     install_pipx_packages
-    stow_dotfiles
-    configure_apps
+
+    create_initial_config_dirs
     configure_system
     configure_zsh
+    install_zsh_plugins_and_themes
 
     stow_dotfiles
 
     cleanup
 
-    echo "✅ Setup concluído com sucesso!"
+    echo "✅ Setup concluído com sucesso! (Distro: ${DISTRO})"
     echo "---"
     echo "⚠️  CHECKLIST DE AÇÕES PÓS-INSTALAÇÃO ⚠️"
     echo ""
-    echo "   1. REINICIE A SESSÃO: Faça logout/login (ou reinicie o computador) para aplicar todas as mudanças."
+    echo "   1. REINICIE A SESSÃO: Faça logout/login para aplicar todas as mudanças."
     echo ""
-    echo "   2. CONFIGURE O TERMINAL: Abra o Hyper e mude a fonte para 'FiraCode Nerd Font Mono'."
+    if [[ "$DISTRO" == "ubuntu" ]]; then
+        echo "   2. ESCOLHA A SESSÃO XORG (Para o Flameshot funcionar): Na tela de login, clique na engrenagem e escolha 'Ubuntu on Xorg'."
+        echo ""
+    fi
+    echo "   3. CONFIGURE O TERMINAL: Abra o Ghostty. Crie ~/.config/ghostty/config se quiser customizar (fonte, tema, etc.)."
     echo ""
-    echo "   3. CONFIGURE O ZSH: Abra seu ~/.zshrc e verifique/adicione as linhas para pyenv, zoxide e plugins."
+    echo "   4. CONFIGURE O ZSH: Abra seu ~/.zshrc e verifique/adicione as linhas para pyenv, zoxide e plugins."
     echo ""
-    echo "   4. TESTE O DOCKER: Abra um novo terminal e rode 'docker run hello-world'."
+    echo "   5. TESTE O DOCKER: Abra um novo terminal e rode 'docker run hello-world'."
     echo ""
-    echo "   5. INSTALE EXTENSÕES DO GNOME: Vá para https://extensions.gnome.org/ e instale 'Forge'."
+    if [[ "$DISTRO" == "ubuntu" ]]; then
+        echo "   6. INSTALE EXTENSÕES DO GNOME: Consulte gnome_extensions.txt (seções 'Universal' + 'Ubuntu only')."
+        echo "      → Instale via https://extensions.gnome.org/"
+    elif [[ "$DISTRO" == "popos" ]]; then
+        echo "   6. COSMIC: Extensões GNOME não se aplicam. Configure temas/atalhos via Configurações do COSMIC."
+    fi
     echo ""
-    echo "   6. LOGINS E SINCRONIZAÇÃO: Faça login no Chrome/Brave, VS Code, e autentique suas CLIs (gh, az, aws)."
-    echo ""
+    echo "   7. LOGINS E SINCRONIZAÇÃO: Faça login nos seus apps e autentique suas CLIs (gh, az, aws)."
     echo "---"
     echo "💡 LEMBRETE DE FLUXO DE TRABALHO PYTHON COM PYENV 💡"
     echo ""

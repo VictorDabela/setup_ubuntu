@@ -24,10 +24,14 @@ PIPX_PACKAGES=(pipenv uv pre-commit)
 PYTHON_VERSIONS_TO_INSTALL=(3.12.3 3.10.13)
 PYTHON_GLOBAL_VERSION=3.12.3
 
+# --- Configuração Pessoal (PREENCHA ANTES DE RODAR!) ---
+GIT_USER_NAME="Seu Nome"
+GIT_USER_EMAIL="seu-email@exemplo.com"
+
 # --- Funções de Instalação ---
 install_base_packages() {
     echo "📦 Instalando pacotes base do APT..."
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+    sudo ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ | sudo tee /etc/timezone > /dev/null
     sudo apt-get clean
     sudo apt-get update
     sudo apt-get install -y "${APT_PACKAGES[@]}"
@@ -37,7 +41,7 @@ install_nvm_and_nodejs() {
     echo "📦 Instalando NVM (Node Version Manager), Node.js (LTS) e Yarn..."
 
     # Instala o NVM
-    curl -o- -L https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    curl -o- -L https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
     # Carrega o NVM no ambiente atual do script para poder usá-lo imediatamente
     export NVM_DIR="$HOME/.nvm"
@@ -99,7 +103,7 @@ add_custom_repos_and_install() {
     sudo install -m 0755 -d /etc/apt/keyrings
 
     # Microsoft
-    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/packages.microsoft.gpg > /dev/null
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/packages.microsoft.gpg
     echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod ${UBUNTU_RELEASE_NAME} main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
@@ -110,17 +114,17 @@ add_custom_repos_and_install() {
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
 
     # Docker
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
 
     # HashiCorp (Terraform)
-    wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 
     # Kubernetes (kubectl)
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
     echo "🔄 Atualizando listas de pacotes..."
     sudo apt-get update
@@ -175,8 +179,8 @@ configure_system() {
     sudo usermod -aG docker "$(whoami)"
 
     echo "    - Configurando Git..."
-    git config --global user.name "Tester"
-    git config --global user.email "tester@example.com"
+    git config --global user.name "$GIT_USER_NAME"
+    git config --global user.email "$GIT_USER_EMAIL"
     git config --global init.defaultBranch main
 }
 
